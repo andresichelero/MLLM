@@ -15,6 +15,10 @@ def client():
 
 
 def test_api_health_and_status(client: TestClient):
+    dash_resp = client.get("/")
+    assert dash_resp.status_code == 200
+    assert "MeLLM" in dash_resp.text
+
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"

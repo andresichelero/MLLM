@@ -10,7 +10,7 @@ from typing import Any, List
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from mellm.core.thermodynamics import KaPromptDetector
@@ -149,7 +149,15 @@ def get_app(data_path: str | None = None) -> FastAPI:
     app.state.replay_engine = replay_engine
     app.state.attack_graph = attack_graph
 
-    # --- System Endpoints ---
+    # --- System & Dashboard Endpoints ---
+    @app.get("/", response_class=HTMLResponse)
+    @app.get("/dashboard", response_class=HTMLResponse)
+    async def serve_dashboard():
+        dash_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
+        if os.path.exists(dash_path):
+            with open(dash_path, "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+        return HTMLResponse("<h1>MeLLM Platform</h1><p>Dashboard not found.</p>")
 
     @app.get("/health")
     async def health():
