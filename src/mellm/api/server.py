@@ -281,10 +281,11 @@ def get_app(data_path: str | None = None) -> FastAPI:
 
     @app.get("/api/v1/forensics/graph")
     async def forensics_graph(focus_controllers: bool = True):
-        # Build graph dynamically
-        attack_graph.build_from_replay(replay_engine, focus_controllers=focus_controllers)
-        metrics = attack_graph.get_metrics()
-        elements = attack_graph.export_cytoscape_elements()
+        # Build graph dynamically using isolated reconstructor to avoid concurrency collisions
+        reconstructor = AttackGraphReconstructor()
+        reconstructor.build_from_replay(replay_engine, focus_controllers=focus_controllers)
+        metrics = reconstructor.get_metrics()
+        elements = reconstructor.export_cytoscape_elements()
         return {
             "metrics": metrics.to_dict(),
             "elements": elements,

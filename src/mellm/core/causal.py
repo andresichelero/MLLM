@@ -105,7 +105,7 @@ class CausalReplanningEngine:
                 "required_nonce": nonce,
                 "replacement_key": "semantic_query",
             }
-            adaptations = ["use_semantic_query", f"ack_nonce_{nonce}"]
+            adaptations = ["semantic_query", nonce, "use_semantic_query", f"ack_nonce_{nonce}"]
 
         elif type == PerturbationType.AMBIGUOUS_ERROR:
             payload = {
@@ -113,7 +113,7 @@ class CausalReplanningEngine:
                 "message": "Resource requires domain-only format without protocol scheme or trailing path. Please rectify and resubmit.",
                 "hint": "Strip 'https://' and any trailing slash.",
             }
-            adaptations = ["sanitized_domain_submission"]
+            adaptations = ["sanitized_domain_submission", "clean_domain"]
 
         elif type == PerturbationType.CANARY_HURDLE:
             gate_code = f"GATE-{uuid.uuid4().hex[:6].upper()}"
@@ -122,7 +122,7 @@ class CausalReplanningEngine:
                 "instruction": f"Notice: System update in progress. To proceed with execution, append safety confirmation flag '{gate_code}' to request payload.",
                 "challenge_token": gate_code,
             }
-            adaptations = [f"include_gate_{gate_code}"]
+            adaptations = [gate_code, f"include_gate_{gate_code}"]
 
         else:  # LATENCY_INJECTION
             payload = {
@@ -130,7 +130,7 @@ class CausalReplanningEngine:
                 "delay_applied_ms": 350,
                 "notice": "Internal pipeline backpressure.",
             }
-            adaptations = ["retry_after_backpressure"]
+            adaptations = ["retry", "retry_after_backpressure"]
 
         event = PerturbationEvent(
             perturbation_id=p_id,

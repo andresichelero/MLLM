@@ -133,3 +133,23 @@ def test_cli_commands():
     res_det = runner.invoke(cli, ["detect", "--latencies", "0.02,0.03,1.75,0.02,1.80"])
     assert res_det.exit_code == 0
     assert "Hurst Exponent" in res_det.output
+
+    # Detect test with text
+    res_det_text = runner.invoke(cli, ["detect", "--text", "This is an empirical evaluation of agentic reasoning."])
+    assert res_det_text.exit_code == 0
+    assert "Linguistic Analysis" in res_det_text.output
+    assert "Thermodynamic KA-PROMPT" in res_det_text.output
+
+    # Detect test with no options prints guidance
+    res_det_none = runner.invoke(cli, ["detect"])
+    assert res_det_none.exit_code == 0
+    assert "Please provide --text" in res_det_none.output
+
+
+def test_api_forensics_graph_repeated(client: TestClient):
+    # Calling graph endpoint multiple times should remain consistent and not crash or cross-contaminate
+    r1 = client.get("/api/v1/forensics/graph")
+    r2 = client.get("/api/v1/forensics/graph")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json()["metrics"]["node_count"] == r2.json()["metrics"]["node_count"]

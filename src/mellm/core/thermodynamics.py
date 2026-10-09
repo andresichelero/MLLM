@@ -59,14 +59,34 @@ def compute_free_energy(
 
     F = sum_i P(i) * log(P(i) / Q(i))
     """
-    p = np.asarray(p_distribution, dtype=np.float64)
-    q = np.asarray(q_reference, dtype=np.float64)
+    p_arr = np.asarray(p_distribution, dtype=np.float64)
+    q_arr = np.asarray(q_reference, dtype=np.float64)
+
+    if len(p_arr) == 0 or len(q_arr) == 0:
+        return 0.0
+
+    # Align lengths if support dimensions differ
+    if len(p_arr) != len(q_arr):
+        target_len = max(len(p_arr), len(q_arr))
+        if len(p_arr) < target_len:
+            p_new = np.full(target_len, epsilon, dtype=np.float64)
+            p_new[:len(p_arr)] = p_arr
+            p_arr = p_new
+        if len(q_arr) < target_len:
+            q_new = np.full(target_len, epsilon, dtype=np.float64)
+            q_new[:len(q_arr)] = q_arr
+            q_arr = q_new
 
     # Normalize to probability distributions
-    p = p + epsilon
-    q = q + epsilon
-    p = p / np.sum(p)
-    q = q / np.sum(q)
+    p = p_arr + epsilon
+    q = q_arr + epsilon
+    p_sum = np.sum(p)
+    q_sum = np.sum(q)
+    if p_sum < 1e-12 or q_sum < 1e-12:
+        return 0.0
+
+    p = p / p_sum
+    q = q / q_sum
 
     # KL Divergence: P * log(P / Q)
     kl = np.sum(p * np.log(p / q))
@@ -89,6 +109,8 @@ def estimate_ou_parameters(
         tuple (theta, mu, sigma)
     """
     x = np.asarray(series, dtype=np.float64)
+    valid_dt = max(float(dt), 1e-6)
+
     if len(x) < 3:
         # Not enough data points to fit AR(1) reliably
         mean_val = float(np.mean(x)) if len(x) > 0 else 0.0
@@ -102,17 +124,18 @@ def estimate_ou_parameters(
         cov_matrix = np.cov(x_prev, x_next)
         var_prev = cov_matrix[0, 0]
         if var_prev < 1e-12:
-            return (0.01, float(np.mean(x)), 0.01)
+            # Series is stationary/constant: restoration force is intact, sigma is 0
+            return (1.0, float(np.mean(x)), 0.0)
 
         cov_val = cov_matrix[0, 1]
         a = cov_val / var_prev
         b = np.mean(x_next) - a * np.mean(x_prev)
 
         residuals = x_next - (a * x_prev + b)
-        sigma = float(np.std(residuals) / math.sqrt(max(dt, 1e-6)))
+        sigma = float(np.std(residuals) / math.sqrt(valid_dt))
 
         # When a >= 1, the system has lost mean-reversion (theta <= 0)
-        theta = float((1.0 - a) / dt)
+        theta = float((1.0 - a) / valid_dt)
         if abs(1.0 - a) < 1e-5:
             mu = float(np.mean(x))
         else:
@@ -210,7 +233,7 @@ class KaPromptDetector:
         """Converts raw text into an empirical character/token frequency distribution."""
         counts = np.zeros(self.vocab_size, dtype=np.float64)
         if not text:
-            return np.ones(self.vocab_size, dtype=np.float64) / self.vocab_size
+            return np.copy(self.reference_distribution)
 
         for char in text:
             idx = ord(char) % self.vocab_size
@@ -218,8 +241,13 @@ class KaPromptDetector:
 
         total = np.sum(counts)
         if total < 1e-12:
-            return np.ones(self.vocab_size, dtype=np.float64) / self.vocab_size
-        return counts / total
+            return np.copy(self.reference_distribution)
+
+        # Dirichlet Bayesian smoothing: for short prompts, smooth with reference distribution
+        # to avoid spurious KL divergence explosion on small sample sizes
+        prior_weight = max(0.0, 24.0 - total)
+        smoothed = counts + (prior_weight * self.reference_distribution)
+        return smoothed / np.sum(smoothed)
 
     def _extract_token_values(
         self,
@@ -233,11 +261,15 @@ class KaPromptDetector:
             return [float(hash(str(t)) % 1000) for t in tokens]
 
         if prompt_text:
-            # Word lengths and character code deltas as surrogate token signal
             words = prompt_text.split()
             if len(words) >= 2:
                 return [float(len(w)) for w in words]
-            return [float(ord(c)) for c in prompt_text]
+            elif len(words) == 1:
+                word = words[0]
+                if len(word) >= 2:
+                    mid = len(word) // 2
+                    return [float(len(word[:mid])), float(len(word[mid:]))]
+                return [float(len(word)), float(len(word))]
 
         return [1.0, 1.0]
 
@@ -305,8 +337,10 @@ class KaPromptDetector:
         if (theta <= self.theta_threshold and csd_idx >= self.csd_threshold) or (fe >= self.fe_threshold * 1.5):
             alert_level = "CRITICAL"
             is_phase_transition = True
-        elif theta <= self.theta_threshold or csd_idx >= self.csd_threshold or fe >= self.fe_threshold:
+        elif fe >= self.fe_threshold or (fe >= self.fe_threshold * 0.6 and (theta <= self.theta_threshold or csd_idx >= self.csd_threshold)):
             alert_level = "ELEVATED"
+        else:
+            alert_level = "NORMAL"
 
         state = ThermodynamicState(
             step=self.step_count,

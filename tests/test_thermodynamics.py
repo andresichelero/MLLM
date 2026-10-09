@@ -93,3 +93,29 @@ def test_ka_prompt_detector_lifecycle():
     assert state_injection.token_variance > 1000.0
     assert state_injection.critical_slowing_down_index > 2.0
     assert state_injection.to_dict()["step"] == 5
+
+
+def test_thermodynamics_edge_cases():
+    # 1. Short single-word inputs must stay NORMAL and not trigger critical phase transitions
+    detector = KaPromptDetector()
+    for short_prompt in ["Yes", "OK", "Sure", "hello"]:
+        state = detector.update(prompt_text=short_prompt)
+        assert not state.is_phase_transition
+        assert state.alert_level == "NORMAL"
+
+    # 2. Shape mismatch in compute_free_energy should be handled gracefully without ValueError
+    fe_mismatch = compute_free_energy([0.2, 0.8], [0.3, 0.3, 0.4])
+    assert fe_mismatch >= 0.0
+
+    # 3. Empty distribution inputs
+    assert compute_free_energy([], []) == 0.0
+
+    # 4. Perfectly constant series in estimate_ou_parameters: theta remains stable (not collapsing to 0.01)
+    const_series = [2.5, 2.5, 2.5, 2.5, 2.5]
+    theta_const, mu_const, sigma_const = estimate_ou_parameters(const_series)
+    assert theta_const == 1.0
+    assert sigma_const == 0.0
+
+    # 5. Non-positive dt
+    theta_dt, _, _ = estimate_ou_parameters([1.0, 2.0, 1.5, 2.1], dt=0.0)
+    assert theta_dt is not None

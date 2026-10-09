@@ -122,6 +122,16 @@ def analyze_zipf_law(text_or_tokens: str | Sequence[str]) -> ZipfMetrics:
 
     freq_counter = collections.Counter(tokens)
     vocab_size = len(freq_counter)
+    if vocab_size < 2:
+        return ZipfMetrics(
+            alpha=0.0,
+            r_squared=0.0,
+            vocabulary_size=vocab_size,
+            total_tokens=n_tokens,
+            is_zipfian=False,
+            details={"reason": "Vocabulary size < 2"},
+        )
+
     sorted_freqs = [count for _, count in freq_counter.most_common()]
 
     ranks = np.arange(1, vocab_size + 1, dtype=np.float64)
@@ -237,10 +247,14 @@ def compute_log_rank_perplexity(
     mean_lr = float(np.mean(log_ranks))
     var_lr = float(np.var(log_ranks))
 
-    # Rank entropy: distribution of ranks across log bins
-    hist, _ = np.histogram(log_ranks, bins=10, density=True)
-    hist = hist[hist > 0]
-    rank_entropy = float(-np.sum(hist * np.log(hist))) if len(hist) > 0 else 0.0
+    # Rank entropy: distribution of ranks across discrete log bins
+    counts, _ = np.histogram(log_ranks, bins=10)
+    total_counts = np.sum(counts)
+    if total_counts > 0:
+        probs = counts[counts > 0] / total_counts
+        rank_entropy = float(max(0.0, -np.sum(probs * np.log(probs))))
+    else:
+        rank_entropy = 0.0
 
     # Flatness score: inversely proportional to burstiness variance
     # Low variance => high flatness => strong indication of synthetic/LLM output

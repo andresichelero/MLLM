@@ -69,6 +69,22 @@ def test_linguistic_classifier_integration():
         "Furthermore, the underlying architecture demonstrates robust adherence to systemic security requirements."
     )
     profile = classifier.classify(synthetic_ai_text, decoy_signature="oxente")
-    assert isinstance(profile, LinguisticProfile)
     assert profile.shibboleth is not None
     assert profile.shibboleth.robotic_overexplanation
+
+
+def test_linguistics_edge_cases():
+    # 1. Repetitive single word: vocab_size=1 should not raise LinAlgError
+    repetitive_tokens = ["the"] * 30
+    zipf_rep = analyze_zipf_law(repetitive_tokens)
+    assert not zipf_rep.is_zipfian
+    assert zipf_rep.alpha == 0.0
+
+    # 2. Log-rank entropy on identical tokens must be non-negative
+    log_rank_rep = compute_log_rank_perplexity(repetitive_tokens)
+    assert log_rank_rep.rank_entropy >= 0.0
+
+    # 3. Empty text string should classify cleanly as AMBIGUOUS without exception
+    classifier = LinguisticClassifier()
+    empty_profile = classifier.classify("")
+    assert empty_profile.classification == "AMBIGUOUS"

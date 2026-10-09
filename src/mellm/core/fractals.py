@@ -57,6 +57,7 @@ def detrended_fluctuation_analysis(
         tuple (scales, fluctuations, hurst_exponent)
     """
     x = np.asarray(series, dtype=np.float64)
+    x = x[np.isfinite(x)]
     n = len(x)
 
     if n < 16:
@@ -213,14 +214,19 @@ def classify_traffic(
     # 1. Bursts of rapid tool requests (low latency, correlated)
     # 2. Significant pause for model inference (e.g. 1.0s - 2.5s)
     # 3. High variance in rolling Hurst values across windows
-    has_inference_pauses = np.any((x >= 0.8) & (x <= 4.0))
-    has_rapid_bursts = np.any(x < 0.15)
+    burst_count = int(np.count_nonzero(x < 0.20))
+    pause_count = int(np.count_nonzero((x >= 0.8) & (x <= 4.0)))
+    burst_ratio = burst_count / n
+    has_inference_pauses = pause_count > 0
+    has_rapid_bursts = burst_count > 0
 
-    if has_inference_pauses and has_rapid_bursts:
+    has_agent_structure = (burst_count >= 2 and pause_count >= 1 and burst_ratio >= 0.15) or (h_variance > 0.04 and burst_count >= 1 and pause_count >= 1)
+
+    if has_agent_structure:
         classification = "LLM_AGENT"
         confidence = min(0.95, 0.75 + min(0.20, h_variance * 2.0))
         cognitive_phase = "BURST_RETRIEVAL" if x[-1] < 0.5 else "INFERENCE_VALLEY"
-    elif var_lat < 0.001 or (0.45 <= hurst <= 0.55 and not has_inference_pauses):
+    elif var_lat < 0.001 or (0.45 <= hurst <= 0.55 and pause_count == 0):
         classification = "MECHANICAL_BOT"
         confidence = 0.85
         cognitive_phase = "STATIONARY"
@@ -228,9 +234,13 @@ def classify_traffic(
         classification = "HUMAN"
         confidence = min(0.90, 0.5 + (hurst - 0.5))
         cognitive_phase = "STATIONARY"
-    elif hurst < 0.45:
+    elif hurst < 0.45 and (var_lat < 0.05 or mean_lat < 0.5):
         classification = "MECHANICAL_BOT"
         confidence = 0.80
+        cognitive_phase = "STATIONARY"
+    elif mean_lat >= 1.5 and var_lat > 0.1:
+        classification = "HUMAN"
+        confidence = 0.70
         cognitive_phase = "STATIONARY"
     else:
         classification = "INDETERMINATE"

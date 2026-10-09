@@ -70,3 +70,37 @@ def test_evaluate_human_operator():
     )
     assert res.classification == "HUMAN_OPERATOR"
     assert res.human_probability > res.agent_probability
+
+
+def test_evaluate_raw_payload_automatic_adaptation():
+    engine = CausalReplanningEngine()
+
+    # 1. Schema mutation: payload contains replacement_key and nonce without replanned_successfully explicit flag
+    event_schema = engine.generate_perturbation(PerturbationType.SCHEMA_MUTATION)
+    nonce = event_schema.payload["required_nonce"]
+    res_auto = engine.evaluate_response(
+        perturbation=event_schema,
+        response_latency_seconds=1.70,
+        response_payload={"semantic_query": "SELECT * FROM models", "validation_nonce": nonce},
+    )
+    assert res_auto.replanning_detected is True
+    assert res_auto.classification == "LLM_AGENT"
+
+    # 2. Canary hurdle: payload contains gate code
+    event_gate = engine.generate_perturbation(PerturbationType.CANARY_HURDLE)
+    gate_code = event_gate.payload["challenge_token"]
+    res_gate = engine.evaluate_response(
+        perturbation=event_gate,
+        response_latency_seconds=1.65,
+        response_payload={"action": "exec", "flag": gate_code},
+    )
+    assert res_gate.replanning_detected is True
+
+    # 3. String perturbation ID not in active registry handles gracefully
+    res_unknown = engine.evaluate_response(
+        perturbation="non-existent-uuid",
+        response_latency_seconds=1.70,
+        response_payload={"data": "test"},
+    )
+    assert res_unknown.perturbation_id == "non-existent-uuid"
+    assert res_unknown.classification == "LLM_AGENT"

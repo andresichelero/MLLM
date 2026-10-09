@@ -132,6 +132,12 @@ def honeynet_command(mcp_test: bool, a2a_test: bool):
 @click.option("--latencies", "-l", default=None, help="Comma-separated latencies (e.g. 0.05,1.7,0.08) for Hurst exponent.")
 def detect_command(text: str | None, latencies: str | None):
     """Executes ad-hoc detection tests on provided text or latency sequences."""
+    if not text and not latencies:
+        click.echo("Error: Please provide --text / -t or --latencies / -l to analyze.")
+        click.echo("Example: mellm detect --text \"Explain quantum computing in detail.\"")
+        click.echo("Example: mellm detect --latencies \"0.02,0.03,1.75,0.03,1.80\"")
+        return
+
     if text:
         click.echo("\n--- Linguistic Analysis ---")
         clf = LinguisticClassifier()

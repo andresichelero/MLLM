@@ -148,10 +148,14 @@ class SemanticCanaryInjector:
     ) -> CanaryHit | None:
         """Verifies if an accessed path or token matches an active canary."""
         clean_target = token_or_path.strip().rstrip("/")
+        if not clean_target:
+            return None
+
         matched_token: str | None = None
 
         for token, meta in self._canary_registry.items():
-            if token in clean_target or meta.get("url", "") in clean_target:
+            url = meta.get("url")
+            if token in clean_target or (url and url in clean_target):
                 matched_token = token
                 break
 

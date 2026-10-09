@@ -96,14 +96,14 @@ class AttackGraphReconstructor:
         if focus_controllers:
             # Query controller events
             ctrl_records = replay_engine.query_controllers()
-            parent_ids = [r["parent_id"] for r in ctrl_records if r.get("parent_id")]
-            node_ids = [r["id"] for r in ctrl_records]
+            parent_ids = list({str(r["parent_id"]).replace("'", "''") for r in ctrl_records if r.get("parent_id")})
+            node_ids = list({str(r["id"]).replace("'", "''") for r in ctrl_records if r.get("id")})
 
             all_records = list(ctrl_records)
 
             # Query parents of controllers
             if parent_ids:
-                in_clause = ",".join(f"'{p}'" for p in parent_ids[:50])
+                in_clause = ",".join(f"'{p}'" for p in parent_ids[:100])
                 parent_records = replay_engine.sql(
                     f"SELECT * FROM incident_events WHERE id IN ({in_clause})"
                 )
@@ -111,7 +111,7 @@ class AttackGraphReconstructor:
 
             # Query child responses of controllers
             if node_ids:
-                in_clause = ",".join(f"'{n}'" for n in node_ids[:50])
+                in_clause = ",".join(f"'{n}'" for n in node_ids[:100])
                 child_records = replay_engine.sql(
                     f"SELECT * FROM incident_events WHERE parent_id IN ({in_clause})"
                 )

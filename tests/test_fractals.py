@@ -69,3 +69,16 @@ def test_classify_traffic_edge_cases():
     # Short
     short_res = classify_traffic([0.1, 0.2, 0.3])
     assert short_res.classification in ("INDETERMINATE", "MECHANICAL_BOT")
+
+
+def test_fractals_edge_cases():
+    # 1. DFA with non-finite values (NaN / Inf) should not crash
+    series_with_nans = [1.0, 1.2, float("nan"), 1.5, 1.8, float("inf"), 2.0] * 4
+    scales, flucs, hurst = detrended_fluctuation_analysis(series_with_nans)
+    assert len(scales) > 0
+    assert hurst is not None
+
+    # 2. Human persistent browsing without rapid bursts
+    human_latencies = [2.5, 3.1, 1.8, 4.2, 2.9, 5.0, 3.3, 2.7, 3.8, 4.5, 2.2, 3.4, 4.0, 3.0, 2.8, 3.5]
+    res_human = classify_traffic(human_latencies)
+    assert res_human.classification in ("HUMAN", "INDETERMINATE")

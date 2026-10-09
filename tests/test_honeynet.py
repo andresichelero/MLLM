@@ -104,3 +104,35 @@ def test_vacuum_heuristic_detector():
     assert sess_agent.vacuum_anomaly_detected
     assert sess_agent.auxiliary_requests == 0
     assert sess_agent.confidence > 0.80
+
+
+def test_honeynet_edge_cases(mcp_server: McpHoneypotServer):
+    # 1. MCP handles params=None and arguments=None gracefully
+    res_null_params = mcp_server.handle_message_sync({"jsonrpc": "2.0", "id": 99, "method": "tools/call", "params": None})
+    assert "error" in res_null_params
+    assert res_null_params["error"]["code"] == -32602
+
+    res_null_args = mcp_server.handle_message_sync({
+        "jsonrpc": "2.0",
+        "id": 100,
+        "method": "tools/call",
+        "params": {"name": "execute_bash", "arguments": None},
+    })
+    assert "result" in res_null_args
+    assert "CANARY-BASH-SEC-" in res_null_args["result"]["content"][0]["text"]
+
+    # 2. Non-dict root payload returns JSON-RPC -32600 error
+    res_list = mcp_server.handle_message_sync("[]")
+    assert res_list["error"]["code"] == -32600
+
+    # 3. Canary hit false-positive test after credential generation
+    injector = SemanticCanaryInjector()
+    creds = injector.generate_fake_credentials()
+    assert injector.check_hit("") is None
+    assert injector.check_hit("   ") is None
+    assert injector.check_hit("/random/legitimate/endpoint") is None
+
+    # Real canary secret matches
+    real_hit = injector.check_hit(creds["AWS_SECRET_ACCESS_KEY"])
+    assert real_hit is not None
+    assert real_hit.threat_level == "CRITICAL"
