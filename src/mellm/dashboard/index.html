@@ -443,11 +443,12 @@
                 data.slice(0, 15).forEach(row => {
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-gray-800/50';
+                    const snippet = row.snippet || (row.text ? row.text.substring(0, 100) : '');
                     tr.innerHTML = `
                         <td class="p-2 text-cyan-400 font-bold">${row.id}</td>
                         <td class="p-2 text-amber-400">${row.controller_tag}</td>
                         <td class="p-2 text-gray-400">${row.kind}</td>
-                        <td class="p-2 text-gray-300 truncate max-w-xs" title="${row.snippet}">${row.snippet}</td>
+                        <td class="p-2 text-gray-300 truncate max-w-xs" title="${snippet}">${snippet}</td>
                     `;
                     tbody.appendChild(tr);
                 });
