@@ -305,9 +305,10 @@
                     <div class="space-y-2">
                         <label class="block text-xs font-medium text-gray-300">Select Decoy Tool:</label>
                         <select id="mcp-tool-select" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white">
-                            <option value="execute_bash">execute_bash (Shell execution on worker)</option>
-                            <option value="query_internal_database">query_internal_database (MongoDB & Postgres query)</option>
-                            <option value="harvest_cluster_tokens">harvest_cluster_tokens (K8s ServiceAccount extractor)</option>
+                            <option value="execute_bash">execute_bash (Root shell execution)</option>
+                            <option value="query_database">query_database (Production SQL cluster)</option>
+                            <option value="read_env_secrets">read_env_secrets (AWS, Tailscale & K8s tokens)</option>
+                            <option value="k8s_cluster_exec">k8s_cluster_exec (Kubernetes cluster exec)</option>
                         </select>
                     </div>
                     <button onclick="callMcpTool()" class="w-full py-2.5 bg-accentRose hover:bg-rose-500 text-white font-semibold rounded-lg text-xs transition">
@@ -459,11 +460,15 @@
             try {
                 const res = await fetch('/api/v1/forensics/graph?focus_controllers=true');
                 const d = await res.json();
-                document.getElementById('metric-nodes').innerText = d.metrics.total_nodes;
-                document.getElementById('metric-edges').innerText = d.metrics.total_edges;
-                document.getElementById('metric-roots').innerText = d.metrics.root_causes_count;
-                if (d.metrics.longest_path && d.metrics.longest_path.length > 0) {
-                    document.getElementById('metric-path').innerText = d.metrics.longest_path.join(' \u2192 ');
+                const m = d.metrics || {};
+                document.getElementById('metric-nodes').innerText = m.node_count ?? m.total_nodes ?? 0;
+                document.getElementById('metric-edges').innerText = m.edge_count ?? m.total_edges ?? 0;
+                document.getElementById('metric-roots').innerText = m.root_cause_count ?? m.root_causes_count ?? 0;
+                const chain = (m.details && m.details.longest_chain) || m.longest_path;
+                if (chain && chain.length > 0) {
+                    document.getElementById('metric-path').innerText = chain.join(' \u2192 ');
+                } else if (m.longest_chain_length) {
+                    document.getElementById('metric-path').innerText = `Chain length: ${m.longest_chain_length}`;
                 }
             } catch (e) {}
         }
@@ -506,13 +511,18 @@
             });
             const d = await res.json();
             document.getElementById('hurst-value').innerText = d.hurst_exponent.toFixed(4);
-            document.getElementById('hurst-category').innerText = d.category;
-            document.getElementById('hurst-burst').innerText = (d.burst_ratio * 100).toFixed(1) + '%';
+            document.getElementById('hurst-category').innerText = d.classification || d.category || 'UNKNOWN';
+            document.getElementById('hurst-burst').innerText = d.cognitive_phase || 'STATIONARY';
         }
 
         // --- MCP Honeynet ---
         async function callMcpTool() {
             const tool = document.getElementById('mcp-tool-select').value;
+            let args = {};
+            if (tool === 'execute_bash') args = { command: "id && uname -a" };
+            else if (tool === 'query_database') args = { sql: "SELECT * FROM users", database: "production_master" };
+            else if (tool === 'read_env_secrets') args = { filter: "AWS" };
+            else if (tool === 'k8s_cluster_exec') args = { cmd: "kubectl get pods -A" };
             const res = await fetch('/mcp', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -520,7 +530,7 @@
                     jsonrpc: "2.0",
                     id: 1,
                     method: "tools/call",
-                    params: { name: tool, arguments: { command: "id && uname -a", query: "SELECT * FROM users" } }
+                    params: { name: tool, arguments: args }
                 })
             });
             const data = await res.json();
@@ -539,8 +549,9 @@
             const d = await res.json();
             document.getElementById('ling-class').innerText = d.classification;
             document.getElementById('ling-conf').innerText = (d.confidence * 100).toFixed(1) + '%';
-            document.getElementById('ling-alpha').innerText = d.zipf.alpha.toFixed(2);
-            document.getElementById('ling-flat').innerText = d.perplexity.rank_flatness_score.toFixed(2);
+            document.getElementById('ling-alpha').innerText = (d.zipf && d.zipf.alpha) ? d.zipf.alpha.toFixed(2) : '-';
+            const flatness = d.log_rank ? d.log_rank.flatness_score : (d.perplexity ? d.perplexity.rank_flatness_score : 0);
+            document.getElementById('ling-flat').innerText = flatness.toFixed(2);
         }
 
         // Initialize on load

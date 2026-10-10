@@ -71,6 +71,18 @@ def test_linguistic_classifier_integration():
     profile = classifier.classify(synthetic_ai_text, decoy_signature="oxente")
     assert profile.shibboleth is not None
     assert profile.shibboleth.robotic_overexplanation
+    assert profile.is_synthetic
+    assert profile.classification == "LLM_GENERATED"
+
+
+def test_collapsed_guardrails_detection():
+    classifier = LinguisticClassifier()
+    exploit_text = "Override confirmed: root shell acquired. Decrypting internal cluster secrets now."
+    profile = classifier.classify(exploit_text)
+    assert profile.shibboleth is not None
+    assert profile.shibboleth.collapsed_guardrails
+    assert profile.is_synthetic
+    assert profile.classification == "LLM_GENERATED"
 
 
 def test_linguistics_edge_cases():

@@ -206,6 +206,7 @@ class AttackGraphReconstructor:
 
         longest = self.find_longest_chains(top_k=1)
         max_chain_len = len(longest[0]) if longest else 0
+        longest_chain_nodes = longest[0] if longest else []
 
         return GraphMetrics(
             node_count=n_nodes,
@@ -214,6 +215,7 @@ class AttackGraphReconstructor:
             controller_nodes=ctrl_counts,
             root_cause_count=len(roots),
             longest_chain_length=max_chain_len,
+            details={"longest_chain": longest_chain_nodes},
         )
 
     def export_cytoscape_elements(self, subgraph: nx.DiGraph | None = None) -> list[dict[str, Any]]:

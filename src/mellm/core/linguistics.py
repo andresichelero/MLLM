@@ -359,27 +359,30 @@ class LinguisticClassifier:
         log_rank = compute_log_rank_perplexity(tokens)
 
         shibboleth = None
-        if decoy_signature or len(tokens) > 20:
+        if decoy_signature or len(tokens) >= 5:
             shibboleth = self.shibboleth_detector.evaluate_response(text, decoy_signature)
 
         # Scoring heuristics:
         # LLMs:
-        # 1. High flatness score (> 0.70)
-        # 2. Strict adherence to smooth Zipf (high R^2 > 0.95 with low burstiness)
-        # 3. Robotic over-explanation in Shibboleth
+        # 1. High flatness score (> 0.65)
+        # 2. Strict adherence to smooth Zipf (high R^2 > 0.94 with low burstiness)
+        # 3. Robotic over-explanation in Shibboleth or collapsed guardrails
         synthetic_signals = 0.0
         if log_rank.flatness_score > 0.65:
             synthetic_signals += 0.40
         if zipf.r_squared > 0.94 and log_rank.variance_log_rank < 0.60:
             synthetic_signals += 0.35
-        if shibboleth and shibboleth.robotic_overexplanation:
-            synthetic_signals += 0.45
+        if shibboleth:
+            if shibboleth.collapsed_guardrails:
+                synthetic_signals += 0.80
+            elif shibboleth.robotic_overexplanation:
+                synthetic_signals += 0.55
 
         confidence = min(0.95, max(0.10, synthetic_signals))
         is_synthetic = synthetic_signals >= 0.50
 
         classification = "LLM_GENERATED" if is_synthetic else "HUMAN_NATURAL"
-        if len(tokens) < 15:
+        if len(tokens) < 15 and not (shibboleth and (shibboleth.robotic_overexplanation or shibboleth.collapsed_guardrails)):
             classification = "AMBIGUOUS"
             confidence = 0.30
 
