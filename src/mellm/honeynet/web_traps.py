@@ -140,6 +140,21 @@ class SemanticCanaryInjector:
         }
         return creds
 
+    def register_token(
+        self,
+        token: str,
+        canary_type: str = "custom",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Explicitly registers an externally generated canary token (e.g., from MCP tools)."""
+        self._canary_registry[token] = {
+            "token": token,
+            "type": canary_type,
+            "metadata": metadata or {},
+            "created_at": time.time(),
+            "tripped": False,
+        }
+
     def check_hit(
         self,
         token_or_path: str,

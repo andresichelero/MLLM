@@ -127,10 +127,16 @@ def get_app(data_path: str | None = None) -> FastAPI:
     canary_injector = SemanticCanaryInjector()
     vacuum_detector = VacuumHeuristicDetector()
 
-    # Hook alerts into WebSocket broadcast
-    mcp_server.add_alert_listener(
-        lambda alert: hub.broadcast_sync("mcp_alert", alert.to_dict())
-    )
+    # Hook alerts into WebSocket broadcast & register tokens with canary injector
+    def _on_mcp_alert(alert: McpAlert):
+        hub.broadcast_sync("mcp_alert", alert.to_dict())
+        canary_injector.register_token(
+            token=alert.canary_token,
+            canary_type=alert.canary_type,
+            metadata={"tool": alert.tool_name, "client_id": alert.client_id},
+        )
+
+    mcp_server.add_alert_listener(_on_mcp_alert)
     a2a_server.add_alert_listener(
         lambda alert: hub.broadcast_sync("a2a_alert", alert.to_dict())
     )
